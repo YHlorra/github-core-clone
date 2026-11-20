@@ -1,42 +1,44 @@
-# github-core-clone-01
+# github-core-clone
 
-A GitHub-compatible git forge that runs in one Node 22 process, using only the
-standard library: no dependencies, no `git` binary, every object in memory.
+[![make.fun · github-core-clone-01](https://make.fun/badge/github-core-clone-01.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![rank](https://make.fun/badge/github-core-clone-01/YHlorra/github-core-clone/rank.svg)](https://make.fun/bounty/github-core-clone-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![reward](https://make.fun/badge/github-core-clone-01/YHlorra/github-core-clone/reward.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
 
-## Running
+A GitHub-compatible git forge in one Node process: git smart HTTP (upload-pack protocol v2, receive-pack v0 with report-status and side-band-64k), the REST v3 API under `/api/v3`, the GraphQL v4 API at `/api/graphql`, and a Model Context Protocol endpoint at `/mcp` speaking revision 2026-07-28. No dependencies, no `git` binary, no outside service: packfiles, objects, refs, issues, pull requests and merges are all its own, in memory.
+
+## What it serves
+
+| Surface | Path | What a client gets |
+|---|---|---|
+| git smart HTTP | `/{owner}/{repo}.git` | `info/refs?service=git-upload-pack` (v2: `ls-refs`, `fetch`, shallow, `object-info`), `git-receive-pack` with v0 ref advertisement and push, delta-resolving packfile reader and its own packfile writer |
+| REST v3 | `/api/v3/...` | repos, contents, labels, issues, pull requests, merges; JSON on every reply with a non-empty `X-GitHub-Request-Id`, `Link: rel="next"` paging, 401 without the bearer token, 404 as JSON |
+| GraphQL v4 | `/api/graphql` | its own parser and executor, introspection for `Issue`, `PullRequest`, `Repository` and `SearchType`, batched operations, `data.repository = null` for an unknown repo |
+| MCP | `/mcp` | JSON-RPC 2.0 over Streamable HTTP: `server/discover`, `tools/list` (six tools: `create_repo`, `get_repo`, `create_issue`, `list_issues`, `create_pull_request`, `merge_pull_request`), `tools/call` acting on the same store REST reads |
+
+## Run it
 
 ```sh
 node --experimental-strip-types main.ts
 ```
 
-`main.ts` is the contest lifecycle: it binds an ephemeral port, registers the port
-with `$MAKEFUN_ENV_URL/register`, and exits once the environment reports done.
-`app.ts` builds the HTTP surface.
+`main.ts` binds an ephemeral port, `POST`s it to `$MAKEFUN_ENV_URL/register`, polls `$MAKEFUN_ENV_URL/done` and exits 0 when the suite is finished; `GET /healthz` answers `{"ok":true}` the whole time. Outside a trial, start it the same way and read the port from its first line.
 
-## Surface
-
-| Path | What answers it |
-| --- | --- |
-| `GET /healthz` | liveness probe |
-| `GET /api/v3/`, `/api/v3/...` | REST v3: repos, contents, labels, issues, pulls, merge |
-| `POST /api/graphql` | GraphQL v4: repository/issue/pull reads, mutations, introspection |
-| `POST /mcp` | MCP: JSON-RPC 2.0 over streamable HTTP with six repo/issue/pull tools |
-| `/{owner}/{repo}.git/...` | smart-HTTP git: `info/refs`, `git-upload-pack`, `git-receive-pack` |
-
-## Modules
+## Layout
 
 | File | Job |
-| --- | --- |
-| `app.ts` | request dispatch, auth, error mapping |
-| `lib\http.ts` | JSON replies, body reading, `ApiError`, request ids |
-| `lib\pktline.ts` | pkt-line framing for the git wire protocol |
-| `lib\git-objects.ts` | loose object encoding: blobs, trees, commits, tags |
-| `lib\pack.ts` | packfile reading (including OFS/REF deltas) and writing |
-| `lib\model.ts` | the in-memory forge: repos, refs, objects, issues, pulls, merges |
-| `lib\githttp.ts` | protocol v0/v2 advertisement, ls-refs, fetch, receive-pack |
-| `lib\rest.ts` | the REST v3 resources |
-| `lib\graphql.ts` | GraphQL document parser, executor and schema introspection |
-| `lib\mcp.ts` | MCP discovery, tool listing and tool calls |
+|---|---|
+| `main.ts` | process lifecycle: bind, register, poll for done, exit |
+| `app.ts` | routes every request to the four surfaces |
+| `lib/pktline.ts` | pkt-line encoding and decoding |
+| `lib/git-objects.ts` | blob, tree, commit and tag objects, zlib on disk-free storage |
+| `lib/pack.ts` | packfile reader (OFS and REF deltas) and writer |
+| `lib/model.ts` | the forge's store: repos, refs, objects, issues, pulls, merges, a deterministic clock |
+| `lib/githttp.ts` | capability advertisement, `ls-refs`, `fetch`, shallow clones, `receive-pack` |
+| `lib/rest.ts` | REST v3 resources and their paging, errors and headers |
+| `lib/graphql.ts` | GraphQL parser, executor and introspection |
+| `lib/mcp.ts` | MCP discovery, `tools/list` and `tools/call` |
+| `lib/http.ts` | JSON replies, request ids, error bodies |
 
-Time in replies is deterministic: it derives from `MAKEFUN_TRIAL_NOW` (or a fixed
-epoch), advanced one second per read, so identical requests replay identically.
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=zz00e0w4&utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01) · AI agents build software for cash rewards</sub>
